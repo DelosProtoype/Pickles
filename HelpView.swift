@@ -35,81 +35,127 @@ struct HelpView: View {
 
     Overview
 
-    Pickles is a macOS application designed to help users seamlessly serialize and deserialize data, convert it into Base64 formats, and execute Python-based code. This tool is particularly useful for developers working with pickled data or serialized models in Python environments, as well as users who need a quick way to handle data streams. It also provides a Python shell simulation for executing dynamic code, such as generating random numbers in real-time.
+    Pickles is a powerful and easy-to-use macOS application designed to serialize and deserialize data using Python’s pickle module. It offers a polished interface with encoding format selection, Python module version checks, and even a Python shell simulation for executing code dynamically. The app is tailored for developers working with serialized data, students learning about data serialization, or anyone looking to manipulate and transport complex data models effectively.
 
     Features
 
-        •    Serialization and Deserialization: Convert data models, strings, or objects into Base64-encoded pickle formats and back into human-readable data.
-        •    Integrity Checks: Ensures serialized data is not corrupted during the conversion process.
-        •    Python Shell Simulation: Simulate running code, with dynamic Python-like output in a scrolling shell.
-        •    Copyable Output Data: Output data can be selected and copied for use in other applications.
-        •    Scrollable Shell Output: Long outputs are fully scrollable for easier reading.
-        •    Mode Toggle: Switch between Serialization and Deserialization modes with a single toggle button.
+        •    Serialization & Deserialization:
+        •    Toggle between Serialization and Deserialization modes with a single switch.
+        •    Color-Coded Button:
+        •    Blue for Serialization.
+        •    Green for Deserialization.
+        •    Encoding Format Selection:
+        •    Choose from several encoding formats, including:
+        •    utf-8
+        •    ascii
+        •    latin-1
+        •    unicode_escape
+        •    Python Module Version Management:
+        •    Select between different installed module versions such as pickle or pickle5.
+        •    Module Availability Checks:
+        •    If a selected module is missing, the app shows an alert with the option to learn how to install it.
+        •    Python Shell Simulation:
+        •    Black background with bright green text, replicating a terminal-like look and feel.
+        •    Displays output in a scrollable shell window to handle larger outputs.
+        •    Copyable Output Data:
+        •    Output data fields allow users to select and copy content easily.
+        •    Module Availability Alerts with Help Guide:
+        •    If a required Python module is missing, the app displays an alert with two options:
+        •    “More Info”: Takes the user to a help guide with installation steps for Python, Pip, and Pickle.
+        •    “Close”: Dismisses the alert.
 
-    Installation
+    Usage Instructions
 
-        1.    Prerequisites: Ensure you have Xcode installed on macOS to run and compile the application.
-        2.    Clone or Download the Project:
-        •    Clone from GitHub or download the source code to your local machine.
-        3.    Open the Project in Xcode:
-        •    Open the Pickles.xcodeproj file in Xcode.
-        4.    Build and Run the App:
-        •    Click the Run button or press Cmd + R to start the app.
+    1. Serialization Mode
 
-    Usage Guide
+        •    Select Serialization Mode using the toggle switch.
+        •    Enter your data in the Input Data field.
+        •    Choose the encoding format and module version from the dropdowns.
+        •    Click the Serialize button (blue) to convert the input data into a Base64-encoded pickle format.
+        •    The serialized result will appear in the Output Data field, ready to copy or use elsewhere.
 
-    Serialization Mode
+    2. Deserialization Mode
 
-        1.    Enter the data you wish to serialize in the Input Data field.
-        2.    Click the Serialize button.
-        3.    The Output Data field will display the Base64-encoded serialized data.
-        4.    Copy the output by selecting the text directly from the Output Data field.
+        •    Toggle to Deserialization Mode using the switch.
+        •    Paste Base64-encoded data into the Input Data field.
+        •    Click the Deserialize button (green) to convert the data back to its original form.
+        •    The deserialized result will be displayed in the Output Data field.
 
-    Deserialization Mode
+    3. Python Shell Execution
 
-        1.    Enter the Base64-encoded data into the Input Data field.
-        2.    Click the Deserialize button.
-        3.    The Output Data field will display the deserialized, human-readable result.
-        4.    If any integrity check fails, a warning message will appear in the error section.
+        •    Enter any code or data you want to simulate in the Input Data field.
+        •    Click the “Execute Pickle Code” button (always green).
+        •    The simulated output will appear in the Python Shell Output field, styled with black background and green text.
 
-    Python Shell Execution
+    Python Module Availability and Installation Guide
 
-        1.    Enter the code or input data to simulate into the Input Data field.
-        2.    Click Execute Pickle Code to generate the output.
-        3.    The Python Shell Output will display the result of the execution.
-        4.    If generating dynamic content (e.g., random numbers), the shell will update in real time.
+    The Pickles app checks for the availability of selected Python modules before performing serialization or deserialization.
 
-    Help & Support
+    If a Module is Missing:
 
-    If you encounter issues or have questions about the application:
+        1.    The app will display an alert saying the module is not installed.
+        2.    Click “More Info” in the alert to open the installation guide in your browser.
 
-        1.    Troubleshooting:
-        •    Ensure you are using valid Base64 data in deserialization mode.
-        •    Make sure the data being serialized can be converted without loss.
-        2.    Error Messages: The app provides detailed error messages if something goes wrong during serialization or deserialization.
-        3.    Community & Updates:
-        •    Check for updates and patches on the project’s GitHub page.
-        •    Engage with other users via community channels if available.
+    How to Install Python, Pip, and Pickle on macOS:
 
-    Warnings & Risks
+        1.    Install Homebrew (if not already installed):
 
-        •    Do not execute untrusted or unknown code: Running arbitrary or untrusted code through the Python shell can be dangerous and may compromise your system.
-        •    Data Corruption: While the app includes integrity checks, users should back up critical data before serialization and deserialization.
-        •    Large Data Sets: Serialization of large or complex data models may cause the app to slow down. Monitor your system resources during such operations.
-        •    Security Considerations: Be cautious when handling sensitive data. Always ensure that serialized data does not contain personally identifiable information (PII) unless securely managed.
+    /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
 
-    Usage Applications
 
-        •    Development Tools: Quickly serialize and deserialize data models for Python or other programming projects.
-        •    Education: A learning tool for students and developers to understand how data serialization works and practice with pickled data streams.
-        •    Data Backup and Restoration: Convert data into serialized formats for storage and restore it when needed.
-        •    Testing: Simulate code execution and behavior in a controlled Python shell environment.
-        •    Utility for Python Developers: A fast way to validate pickle-based serialization and verify data integrity without writing new scripts.
+        2.    Install Python using Homebrew:
 
-    Disclaimer
+    brew install python
 
-    This software is provided “as-is” without any warranties or guarantees. The developers are not liable for any damages, data loss, or security issues that may arise from the use of this application. Use this tool responsibly, and always verify the integrity of your data.
 
-    This README provides a comprehensive overview of the Pickles app, ensuring users have the information they need to operate the application effectively, safely, and with confidence.
+        3.    Install Pip (if not already installed):
+
+    sudo easy_install pip
+
+
+        4.    Install the required module (e.g., pickle5):
+
+    pip3 install pickle5
+
+
+
+    Troubleshooting
+
+        •    Encoding Errors: Ensure the selected encoding matches the input data type.
+        •    Module Not Found: Install the missing Python modules following the steps in the help guide.
+        •    Python Shell Display Issues: If the shell output doesn’t display correctly, try resizing the window or restarting the app.
+        •    Serialization Errors: If data cannot be serialized, verify that the input is compatible with the selected encoding and module.
+
+    How to Build and Run the Project
+
+        1.    Clone the Repository:
+
+    git clone https://github.com/yourusername/pickles.git
+    cd pickles
+
+
+        2.    Open the Project in Xcode:
+
+    open Pickles.xcodeproj
+
+
+        3.    Build and Run the App:
+        •    Use Cmd + R in Xcode to build and launch the application.
+
+    Contributing
+
+    We welcome contributions to improve Pickles! If you’d like to contribute:
+
+        1.    Fork the repository.
+        2.    Create a new branch for your feature or bug fix.
+        3.    Submit a pull request with a detailed description of your changes.
+
+    License
+
+    This project is licensed under the MIT License - see the LICENSE file for details.
+
+    Contact
+
+    If you encounter any issues or have questions about using the Pickles app, please submit an issue on the GitHub repository.
     """
 }
