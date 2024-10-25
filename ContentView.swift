@@ -6,78 +6,116 @@
 //
 
 import SwiftUI
-import CoreData
+import Foundation
 
 struct ContentView: View {
-    @Environment(\.managedObjectContext) private var viewContext
-
-    @FetchRequest(
-        sortDescriptors: [NSSortDescriptor(keyPath: \Item.timestamp, ascending: true)],
-        animation: .default)
-    private var items: FetchedResults<Item>
-
+    @State private var inputData: String = ""
+    @State private var outputData: String = ""
+    @State private var errorMessage: String? = nil
+    @State private var isSerializationMode: Bool = false // Toggle mode state
+    
     var body: some View {
-        NavigationView {
-            List {
-                ForEach(items) { item in
-                    NavigationLink {
-                        Text("Item at \(item.timestamp!, formatter: itemFormatter)")
-                    } label: {
-                        Text(item.timestamp!, formatter: itemFormatter)
-                    }
+        VStack(alignment: .leading, spacing: 20) {
+            Text("Pickles - Data Serializer & Deserializer")
+                .font(.largeTitle)
+                .padding()
+            
+            // Mode Toggle Button
+            HStack {
+                Toggle(isOn: $isSerializationMode) {
+                    Text(isSerializationMode ? "Serialization Mode" : "Deserialization Mode")
+                        .font(.headline)
+                        .foregroundColor(isSerializationMode ? .blue : .green)
                 }
-                .onDelete(perform: deleteItems)
+                .padding()
+                .toggleStyle(SwitchToggleStyle(tint: isSerializationMode ? .blue : .green))
             }
-            .toolbar {
-                ToolbarItem {
-                    Button(action: addItem) {
-                        Label("Add Item", systemImage: "plus")
+            
+            // Text Editors for Input and Output
+            HStack {
+                TextEditor(text: $inputData)
+                    .border(Color.gray, width: 1)
+                    .frame(height: 200)
+                    .padding()
+                    .onChange(of: inputData) { _ in
+                        errorMessage = nil
                     }
+                
+                TextEditor(text: $outputData)
+                    .border(Color.gray, width: 1)
+                    .frame(height: 200)
+                    .padding()
+                    .disabled(true) // Output is read-only
+            }
+            
+            // Action Buttons
+            HStack {
+                Button(isSerializationMode ? "Serialize" : "Deserialize") {
+                    isSerializationMode ? serializeData() : deserializeData()
+                }
+                .buttonStyle(.borderedProminent)
+                .padding()
+                
+                if !isSerializationMode {
+                    Button("Execute Code") {
+                        executeDeserializedCode()
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .padding()
                 }
             }
-            Text("Select an item")
-        }
-    }
-
-    private func addItem() {
-        withAnimation {
-            let newItem = Item(context: viewContext)
-            newItem.timestamp = Date()
-
-            do {
-                try viewContext.save()
-            } catch {
-                // Replace this implementation with code to handle the error appropriately.
-                // fatalError() causes the application to generate a crash log and terminate. You should not use this function in a shipping application, although it may be useful during development.
-                let nsError = error as NSError
-                fatalError("Unresolved error \(nsError), \(nsError.userInfo)")
+            
+            // Error Message Display
+            if let errorMessage = errorMessage {
+                Text("Error: \(errorMessage)")
+                    .foregroundColor(.red)
+                    .padding()
             }
         }
+        .padding()
     }
-
-    private func deleteItems(offsets: IndexSet) {
-        withAnimation {
-            offsets.map { items[$0] }.forEach(viewContext.delete)
-
-            do {
-                try viewContext.save()
-            } catch {
-                // Replace this implementation with code to handle the error appropriately.
-                // fatalError() causes the application to generate a crash log and terminate. You should not use this function in a shipping application, although it may be useful during development.
-                let nsError = error as NSError
-                fatalError("Unresolved error \(nsError), \(nsError.userInfo)")
-            }
+    
+    // Deserialization Function
+    func deserializeData() {
+        guard let data = inputData.data(using: .utf8) else {
+            errorMessage = "Failed to convert input to data."
+            return
+        }
+        
+        do {
+            let deserializedObject = try NSKeyedUnarchiver.unarchiveTopLevelObjectWithData(data)
+            outputData = "\(deserializedObject ?? "Nil output")"
+        } catch {
+            errorMessage = "Deserialization error: \(error.localizedDescription)"
         }
     }
-}
-
-private let itemFormatter: DateFormatter = {
-    let formatter = DateFormatter()
-    formatter.dateStyle = .short
-    formatter.timeStyle = .medium
-    return formatter
-}()
-
-#Preview {
-    ContentView().environment(\.managedObjectContext, PersistenceController.preview.container.viewContext)
+    
+    // Serialization Function
+    func serializeData() {
+        let objectToSerialize = inputData
+        do {
+            let data = try NSKeyedArchiver.archivedData(withRootObject: objectToSerialize, requiringSecureCoding: false)
+            outputData = data.base64EncodedString()
+        } catch {
+            errorMessage = "Serialization error: \(error.localizedDescription)"
+        }
+    }
+    
+    // Simulated Code Execution Function
+    func executeDeserializedCode() {
+        do {
+            let task = try NSRegularExpression(pattern: #"[a-zA-Z0-9]+\(\)"#, options: [])
+            let matches = task.matches(in: inputData, range: NSRange(location: 0, length: inputData.count))
+            
+            if matches.isEmpty {
+                errorMessage = "No executable code found in the input."
+                return
+            }
+            
+            // Simulating code execution
+            outputData = "Executing code is simulated here. Be cautious with real code."
+        } catch {
+            errorMessage = "Execution error: \(error.localizedDescription)"
+        }
+    }
 }
