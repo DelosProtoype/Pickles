@@ -13,123 +13,125 @@ struct ContentView: View {
     let moduleOptions = ["pickle", "pickle5"]
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 20) {
-            Text("Pickles - Data Serializer & Deserializer")
-                .font(.largeTitle)
-                .fontWeight(.bold)
-                .padding(.top)
+        GeometryReader { geometry in
+            VStack(alignment: .leading, spacing: 20) {
+                Text("Pickles - Data Serializer & Deserializer")
+                    .font(.largeTitle)
+                    .fontWeight(.bold)
+                    .padding(.top)
 
-            // Toggle to switch between serialization and deserialization
-            HStack {
-                Toggle(isOn: $isSerializationMode) {
-                    Text(isSerializationMode ? "Serialization Mode" : "Deserialization Mode")
-                        .font(.headline)
-                        .foregroundColor(isSerializationMode ? .blue : .green)
-                }
-                .toggleStyle(SwitchToggleStyle(tint: isSerializationMode ? .blue : .green))
-                .padding()
-            }
-
-            // Encoding and Module Selection
-            HStack(spacing: 20) {
-                Picker("Select Encoding Format", selection: $selectedEncoding) {
-                    ForEach(encodingOptions, id: \.self) { encoding in
-                        Text(encoding).tag(encoding)
-                    }
-                }
-                .padding()
-
-                Picker("Select Module Version", selection: $selectedModule) {
-                    ForEach(moduleOptions, id: \.self) { module in
-                        Text(module).tag(module)
-                    }
-                }
-                .padding()
-            }
-
-            // Input and Output Sections with Labels
-            HStack(spacing: 20) {
-                VStack(alignment: .leading) {
-                    Text("Input Data:")
-                        .font(.headline)
-                    TextEditor(text: $inputData)
-                        .border(Color.gray, width: 1)
-                        .frame(height: 200)
-                        .padding()
-                        .onChange(of: inputData) { _ in
-                            errorMessage = nil
+                // Encoding and Module Selection
+                HStack(spacing: 20) {
+                    Picker("Select Encoding Format", selection: $selectedEncoding) {
+                        ForEach(encodingOptions, id: \.self) { encoding in
+                            Text(encoding).tag(encoding)
                         }
+                    }
+                    .padding()
+
+                    Picker("Select Module Version", selection: $selectedModule) {
+                        ForEach(moduleOptions, id: \.self) { module in
+                            Text(module).tag(module)
+                        }
+                    }
+                    .padding()
                 }
 
-                VStack(alignment: .leading) {
-                    Text("Output Data (Copyable):")
-                        .font(.headline)
-                    ScrollView {
-                        Text(outputData)
-                            .padding()
-                            .frame(maxWidth: .infinity, alignment: .leading)
+                // Input and Output Sections with Labels
+                HStack(spacing: 20) {
+                    VStack(alignment: .leading) {
+                        Text("Input Data:")
+                            .font(.headline)
+                        TextEditor(text: $inputData)
                             .border(Color.gray, width: 1)
-                            .textSelection(.enabled) // Enable copying from output
-                    }
-                    .frame(height: 200)
-                    .padding()
-                }
-            }
-
-            // Python Shell Output Section with Full Black Background
-            VStack(alignment: .leading) {
-                Text("Python Shell Output (Scrollable):")
-                    .font(.headline)
-                    .padding(.leading)
-
-                // Black background ScrollView and Text
-                ScrollView {
-                    VStack {
-                        Text(pythonShellOutput)
+                            .frame(height: geometry.size.height * 0.25)
                             .padding()
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .foregroundColor(.green)  // Bright green text
-                            .font(.system(.body, design: .monospaced)) // Monospaced font
                     }
-                    .frame(maxWidth: .infinity)  // Make the text view expand
-                    .background(Color.black)     // Black background for the content
-                }
-                .frame(height: 150)
-                .background(Color.black)         // Black background for the scroll view
-                .border(Color.gray, width: 1)     // Optional border for clarity
-                .padding([.leading, .trailing])
-            }
 
-            // Action Buttons for Serialize, Deserialize, and Execute
-            HStack {
-                Button(isSerializationMode ? "Serialize" : "Deserialize") {
-                    checkModuleAvailability()
-                    isSerializationMode ? serializeData() : deserializeData()
+                    VStack(alignment: .leading) {
+                        Text("Output Data (Copyable):")
+                            .font(.headline)
+                        ScrollView {
+                            Text(outputData)
+                                .padding()
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .border(Color.gray, width: 1)
+                                .textSelection(.enabled)
+                        }
+                        .frame(height: geometry.size.height * 0.25)
+                        .padding()
+                    }
                 }
-                .buttonStyle(.borderedProminent)
-                .foregroundColor(.white)
-                .background(isSerializationMode ? Color.blue : Color.green)
-                .cornerRadius(8)
-                .padding()
 
-                Button("Execute Pickle Code") {
-                    executePythonCode()
+                // Python Shell Output Section
+                VStack(alignment: .leading) {
+                    Text("Python Shell Output (Scrollable):")
+                        .font(.headline)
+                        .padding(.leading)
+
+                    ScrollView {
+                        VStack {
+                            Text(pythonShellOutput)
+                                .padding()
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .foregroundColor(.green)
+                                .font(.system(.body, design: .monospaced))
+                        }
+                        .frame(maxWidth: .infinity)
+                        .background(Color.black)
+                    }
+                    .frame(height: geometry.size.height * 0.2)
+                    .background(Color.black)
+                    .border(Color.gray, width: 1)
+                    .padding([.leading, .trailing])
                 }
-                .buttonStyle(.borderedProminent)
-                .foregroundColor(.white)
-                .background(Color.green) // Always green button
-                .cornerRadius(8)
-                .padding()
-            }
 
-            // Error Message Display
-            if let errorMessage = errorMessage {
-                Text("Error: \(errorMessage)")
-                    .foregroundColor(.red)
+                // Error Message Display (Above Buttons)
+                if let errorMessage = errorMessage {
+                    Text("Error: \(errorMessage)")
+                        .foregroundColor(.red)
+                        .padding(.horizontal)
+                        .padding(.bottom, 5)
+                }
+
+                Spacer()
+
+                // Action Buttons and Toggle Alignment
+                HStack(spacing: 40) {  // Adjust spacing between the toggle and buttons
+                    HStack {
+                        Button(isSerializationMode ? "Serialize" : "Deserialize") {
+                            checkModuleAvailability()
+                            isSerializationMode ? serializeData() : deserializeData()
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .foregroundColor(.white)
+                        .background(isSerializationMode ? Color.blue : Color.green)
+                        .cornerRadius(8)
+                        .padding()
+
+                        Button("Execute Pickle Code") {
+                            executePythonCode()
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .foregroundColor(.white)
+                        .background(Color.green)
+                        .cornerRadius(8)
+                        .padding()
+                    }
+
+                    Spacer().frame(width: 80)  // Space between buttons and the toggle
+
+                    Toggle(isOn: $isSerializationMode) {
+                        Text(isSerializationMode ? "Serialization Mode" : "Deserialization Mode")
+                            .font(.headline)
+                            .foregroundColor(isSerializationMode ? .blue : .green)
+                    }
+                    .toggleStyle(SwitchToggleStyle(tint: isSerializationMode ? .blue : .green))
                     .padding()
+                }
             }
+            .padding()
         }
-        .padding()
     }
 
     // Check if the selected module version is installed
@@ -158,7 +160,6 @@ struct ContentView: View {
         alert.informativeText = message
         alert.alertStyle = .warning
 
-        // Add More Info button to open help guide
         alert.addButton(withTitle: "More Info")
         alert.addButton(withTitle: "Close")
 
@@ -167,14 +168,13 @@ struct ContentView: View {
             openHelpGuide()
         }
     }
-    
+
     func openHelpGuide() {
         if let url = URL(string: "https://helpguide.local/install-python-pip-pickle") {
             NSWorkspace.shared.open(url)
         }
     }
 
-    // Serialize Data with Encoding Selection
     func serializeData() {
         let objectToSerialize = inputData
 
@@ -192,7 +192,6 @@ struct ContentView: View {
         }
     }
 
-    // Deserialize Data with Error Handling
     func deserializeData() {
         guard let data = Data(base64Encoded: inputData) else {
             errorMessage = "Invalid input. Please provide valid Base64 data."
@@ -208,7 +207,6 @@ struct ContentView: View {
         }
     }
 
-    // Execute Simulated Python Code
     func executePythonCode() {
         guard !inputData.isEmpty else {
             errorMessage = "No input data to execute."
