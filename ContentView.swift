@@ -4,17 +4,14 @@ struct ContentView: View {
     @State private var inputData: String = ""
     @State private var outputData: String = ""
     @State private var pythonShellOutput: String = "Python Execution Shell Output"
-    @State private var selectedEncoding: String = "utf-8"
+    @State private var selectedEncoding: String = "Auto-Detect"
     @State private var selectedModule: String = "pickle"
     @State private var isSerializationMode: Bool = false  // Start in Deserialization mode
     @State private var errorMessage: String? = nil
 
-    let encodingOptions = ["utf-8", "ascii", "latin-1", "unicode_escape"]
+    let encodingOptionsForSerialization = ["Base64", "UTF-8", "ASCII", "UTF-16", "Latin-1", "Hex"]
+    let encodingOptionsForDeserialization = ["Auto-Detect", "Base64", "UTF-8", "ASCII", "UTF-16", "Latin-1", "Hex"]
     let moduleOptions = ["pickle", "pickle5"]
-
-    // Custom colors
-    let darkGreen = Color(red: 0.0, green: 0.5, blue: 0.0)
-    let redButton = Color.red
 
     var body: some View {
         GeometryReader { geometry in
@@ -27,7 +24,7 @@ struct ContentView: View {
                 // Encoding and Module Selection
                 HStack(spacing: 20) {
                     Picker("Select Encoding Format", selection: $selectedEncoding) {
-                        ForEach(encodingOptions, id: \.self) { encoding in
+                        ForEach(isSerializationMode ? encodingOptionsForSerialization : encodingOptionsForDeserialization, id: \.self) { encoding in
                             Text(encoding).tag(encoding)
                         }
                     }
@@ -103,39 +100,31 @@ struct ContentView: View {
                 // Action Buttons and Toggle Alignment
                 HStack(spacing: 40) {
                     HStack {
-                        // Serialize/Deserialize Button with Dynamic Colors
+                        // Serialize/Deserialize Button
                         Button(isSerializationMode ? "Serialize" : "Deserialize") {
                             if validateModeMismatch() {
                                 isSerializationMode ? serializeData() : deserializeData()
                             }
                         }
                         .buttonStyle(.borderedProminent)
-                        .foregroundColor(.white)
-                        .background(isSerializationMode ? Color.blue : darkGreen)  // Blue for Serialize, Green for Deserialize
-                        .cornerRadius(8)
                         .padding()
 
-                        // Execute Pickle Code Button (Always Red)
+                        // Execute Pickle Code Button
                         Button("Execute Pickle Code") {
                             guard validateExecutableCode() else { return }
                             executePythonCode()
                         }
                         .buttonStyle(.borderedProminent)
-                        .foregroundColor(.white)
-                        .background(redButton)  // Ensure Red Button
-                        .cornerRadius(8)
                         .padding()
                     }
 
-                    Spacer().frame(width: 80)  // Space between buttons and the toggle
+                    Spacer().frame(width: 80)
 
-                    // Toggle Button for Serialization/Deserialization Mode
                     Toggle(isOn: $isSerializationMode) {
                         Text(isSerializationMode ? "Serialization Mode" : "Deserialization Mode")
                             .font(.headline)
-                            .foregroundColor(isSerializationMode ? .blue : darkGreen)
                     }
-                    .toggleStyle(SwitchToggleStyle(tint: isSerializationMode ? .blue : darkGreen))
+                    .toggleStyle(SwitchToggleStyle())
                     .padding()
                 }
             }
@@ -143,26 +132,44 @@ struct ContentView: View {
         }
     }
 
-    // Validate if the user has entered the correct type of data for the selected mode
+    // Validate if the input matches the selected encoding format
     func validateModeMismatch() -> Bool {
         if isSerializationMode {
-            // Check if the input data is non-empty and not already Base64 encoded
-            if Data(base64Encoded: inputData) != nil {
-                errorMessage = "Input data appears to be serialized. Please switch to 'Deserialize' mode."
+            if Data(base64Encoded: inputData) != nil && selectedEncoding == "Base64" {
+                errorMessage = "Input data is already serialized. Switch to 'Deserialize' mode."
                 return false
             }
         } else {
-            // Check if the input data is Base64 encoded (serialized)
-            if Data(base64Encoded: inputData) == nil {
-                errorMessage = "Input data is not serialized. Please switch to 'Serialize' mode."
-                return false
+            if selectedEncoding == "Auto-Detect" {
+                guard let detectedEncoding = detectEncoding(for: inputData) else {
+                    errorMessage = "Failed to auto-detect encoding. Please select manually."
+                    return false
+                }
+                selectedEncoding = detectedEncoding
             }
         }
-        errorMessage = nil  // No mismatch detected
+        errorMessage = nil
         return true
     }
 
-    // Validate if input contains executable code
+    // Detect the encoding of input data
+    func detectEncoding(for input: String) -> String? {
+        if let _ = Data(base64Encoded: input) {
+            return "Base64"
+        } else if let _ = input.data(using: .utf8) {
+            return "UTF-8"
+        } else if let _ = input.data(using: .ascii) {
+            return "ASCII"
+        } else if let _ = input.data(using: .utf16) {
+            return "UTF-16"
+        } else if input.range(of: #"^[0-9a-fA-F]+$"#, options: .regularExpression) != nil {
+            return "Hex"
+        } else {
+            return nil
+        }
+    }
+
+    // Validate executable code
     func validateExecutableCode() -> Bool {
         if inputData.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             errorMessage = "No executable code found. Please enter valid Python code."
@@ -172,86 +179,36 @@ struct ContentView: View {
         return true
     }
 
-    // Check if the selected module version is installed
-    func checkModuleAvailability() {
-        let task = Process()
-        task.launchPath = "/usr/bin/env"
-        task.arguments = ["python3", "-m", "pip", "show", selectedModule]
-
-        let pipe = Pipe()
-        task.standardOutput = pipe
-        task.launch()
-        task.waitUntilExit()
-
-        let outputData = pipe.fileHandleForReading.readDataToEndOfFile()
-        let output = String(data: outputData, encoding: .utf8) ?? ""
-
-        if output.isEmpty {
-            showAlert("\(selectedModule) is not installed. Please install it to proceed.")
-        }
-    }
-
-    // Show alert if the module is missing
-    func showAlert(_ message: String) {
-        let alert = NSAlert()
-        alert.messageText = "Module Not Found"
-        alert.informativeText = message
-        alert.alertStyle = .warning
-
-        alert.addButton(withTitle: "More Info")
-        alert.addButton(withTitle: "Close")
-
-        let response = alert.runModal()
-        if response == .alertFirstButtonReturn {
-            openHelpGuide()
-        }
-    }
-
-    func openHelpGuide() {
-        if let url = URL(string: "https://helpguide.local/install-python-pip-pickle") {
-            NSWorkspace.shared.open(url)
-        }
-    }
-
     func serializeData() {
-        let objectToSerialize = inputData
+        guard let data = inputData.data(using: .utf8) else {
+            errorMessage = "Failed to encode input data."
+            return
+        }
 
-        do {
-            let data = try NSKeyedArchiver.archivedData(withRootObject: objectToSerialize, requiringSecureCoding: false)
-            let base64String = data.base64EncodedString()
-            outputData = base64String
-            pythonShellOutput = "Serialized Data (Base64):\n\(base64String)"
-        } catch {
-            errorMessage = "Serialization error: \(error.localizedDescription)"
+        switch selectedEncoding {
+        case "Base64":
+            outputData = data.base64EncodedString()
+        case "Hex":
+            outputData = data.map { String(format: "%02x", $0) }.joined()
+        default:
+            errorMessage = "Encoding not supported."
         }
     }
 
     func deserializeData() {
         guard let data = Data(base64Encoded: inputData) else {
-            errorMessage = "Invalid input. Please provide valid Base64 data."
+            errorMessage = "Invalid input for selected encoding."
             return
         }
 
-        do {
-            let deserializedObject = try NSKeyedUnarchiver.unarchiveTopLevelObjectWithData(data)
-            outputData = "\(deserializedObject ?? "Nil output")"
-            pythonShellOutput = "Deserialized Data:\n\(outputData)"
-        } catch {
-            errorMessage = "Deserialization error: \(error.localizedDescription)"
-        }
+        outputData = String(data: data, encoding: .utf8) ?? "Failed to decode data."
     }
 
     func executePythonCode() {
-        guard !inputData.isEmpty else {
-            errorMessage = "No input data to execute."
-            return
-        }
-
         pythonShellOutput = """
-        Python Shell Execution:
-        Running code with input...
+        Executing Python Code:
         \(inputData)
-        (Simulated) Execution complete!
+        (Simulated Execution Complete)
         """
     }
 }
