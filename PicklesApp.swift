@@ -13,5 +13,14 @@ struct PicklesApp: App {
         WindowGroup {
             ContentView()
         }
+        .commands {
+            CommandGroup(replacing: .help) {
+                Button("Pickles Help") {
+                    NSApplication.shared.keyWindow?.contentViewController?.presentAsModalWindow(
+                        NSHostingController(rootView: HelpView())
+                    )
+                }
+            }
+        }
     }
 }

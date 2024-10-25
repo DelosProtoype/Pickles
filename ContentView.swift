@@ -1,18 +1,16 @@
-//
-//  ContentView.swift
-//  Pickles
-//
-//  Created by Kevin ONeil on 10/24/24.
-//
 import SwiftUI
-import Foundation
 
 struct ContentView: View {
     @State private var inputData: String = ""
     @State private var outputData: String = ""
     @State private var pythonShellOutput: String = "Python Execution Shell Output"
+    @State private var selectedEncoding: String = "utf-8"
+    @State private var selectedModule: String = "pickle"
+    @State private var isSerializationMode: Bool = false
     @State private var errorMessage: String? = nil
-    @State private var isSerializationMode: Bool = false // Toggle state for mode
+
+    let encodingOptions = ["utf-8", "ascii", "latin-1", "unicode_escape"]
+    let moduleOptions = ["pickle", "pickle5"]
 
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
@@ -21,7 +19,7 @@ struct ContentView: View {
                 .fontWeight(.bold)
                 .padding(.top)
 
-            // Mode Toggle Section
+            // Toggle to switch between serialization and deserialization
             HStack {
                 Toggle(isOn: $isSerializationMode) {
                     Text(isSerializationMode ? "Serialization Mode" : "Deserialization Mode")
@@ -29,10 +27,27 @@ struct ContentView: View {
                         .foregroundColor(isSerializationMode ? .blue : .green)
                 }
                 .toggleStyle(SwitchToggleStyle(tint: isSerializationMode ? .blue : .green))
-                .padding([.leading, .trailing])
+                .padding()
             }
 
-            // Input and Output Sections
+            // Encoding and Module Selection
+            HStack(spacing: 20) {
+                Picker("Select Encoding Format", selection: $selectedEncoding) {
+                    ForEach(encodingOptions, id: \.self) { encoding in
+                        Text(encoding).tag(encoding)
+                    }
+                }
+                .padding()
+
+                Picker("Select Module Version", selection: $selectedModule) {
+                    ForEach(moduleOptions, id: \.self) { module in
+                        Text(module).tag(module)
+                    }
+                }
+                .padding()
+            }
+
+            // Input and Output Sections with Labels
             HStack(spacing: 20) {
                 VStack(alignment: .leading) {
                     Text("Input Data:")
@@ -60,39 +75,50 @@ struct ContentView: View {
                     .padding()
                 }
             }
-            .padding([.leading, .trailing])
 
-            // Python Shell Output Section
+            // Python Shell Output Section with Full Black Background
             VStack(alignment: .leading) {
                 Text("Python Shell Output (Scrollable):")
                     .font(.headline)
                     .padding(.leading)
 
+                // Black background ScrollView and Text
                 ScrollView {
-                    Text(pythonShellOutput)
-                        .padding()
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .background(Color.black) // Black background
-                        .foregroundColor(.green)  // Bright green text
-                        .font(.system(.body, design: .monospaced)) // Monospaced font
+                    VStack {
+                        Text(pythonShellOutput)
+                            .padding()
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .foregroundColor(.green)  // Bright green text
+                            .font(.system(.body, design: .monospaced)) // Monospaced font
+                    }
+                    .frame(maxWidth: .infinity)  // Make the text view expand
+                    .background(Color.black)     // Black background for the content
                 }
                 .frame(height: 150)
-                .border(Color.gray, width: 1)
+                .background(Color.black)         // Black background for the scroll view
+                .border(Color.gray, width: 1)     // Optional border for clarity
                 .padding([.leading, .trailing])
             }
 
-            // Action Buttons
+            // Action Buttons for Serialize, Deserialize, and Execute
             HStack {
                 Button(isSerializationMode ? "Serialize" : "Deserialize") {
+                    checkModuleAvailability()
                     isSerializationMode ? serializeData() : deserializeData()
                 }
                 .buttonStyle(.borderedProminent)
+                .foregroundColor(.white)
+                .background(isSerializationMode ? Color.blue : Color.green)
+                .cornerRadius(8)
                 .padding()
 
                 Button("Execute Pickle Code") {
                     executePythonCode()
                 }
                 .buttonStyle(.borderedProminent)
+                .foregroundColor(.white)
+                .background(Color.green) // Always green button
+                .cornerRadius(8)
                 .padding()
             }
 
@@ -100,20 +126,60 @@ struct ContentView: View {
             if let errorMessage = errorMessage {
                 Text("Error: \(errorMessage)")
                     .foregroundColor(.red)
-                    .padding([.leading, .trailing, .bottom])
+                    .padding()
             }
         }
-        .frame(width: 850, height: 600) // Fixed window size
         .padding()
     }
 
-    // Serialize Function with Integrity Check
+    // Check if the selected module version is installed
+    func checkModuleAvailability() {
+        let task = Process()
+        task.launchPath = "/usr/bin/env"
+        task.arguments = ["python3", "-m", "pip", "show", selectedModule]
+
+        let pipe = Pipe()
+        task.standardOutput = pipe
+        task.launch()
+        task.waitUntilExit()
+
+        let outputData = pipe.fileHandleForReading.readDataToEndOfFile()
+        let output = String(data: outputData, encoding: .utf8) ?? ""
+
+        if output.isEmpty {
+            showAlert("\(selectedModule) is not installed. Please install it to proceed.")
+        }
+    }
+
+    // Show alert if the module is missing
+    func showAlert(_ message: String) {
+        let alert = NSAlert()
+        alert.messageText = "Module Not Found"
+        alert.informativeText = message
+        alert.alertStyle = .warning
+
+        // Add More Info button to open help guide
+        alert.addButton(withTitle: "More Info")
+        alert.addButton(withTitle: "Close")
+
+        let response = alert.runModal()
+        if response == .alertFirstButtonReturn {
+            openHelpGuide()
+        }
+    }
+    
+    func openHelpGuide() {
+        if let url = URL(string: "https://helpguide.local/install-python-pip-pickle") {
+            NSWorkspace.shared.open(url)
+        }
+    }
+
+    // Serialize Data with Encoding Selection
     func serializeData() {
         let objectToSerialize = inputData
 
         do {
             let data = try NSKeyedArchiver.archivedData(withRootObject: objectToSerialize, requiringSecureCoding: false)
-            // Verify integrity by decoding the object back
             if let decodedObject = try NSKeyedUnarchiver.unarchiveTopLevelObjectWithData(data) as? String, decodedObject == objectToSerialize {
                 let base64String = data.base64EncodedString()
                 outputData = base64String
@@ -126,7 +192,7 @@ struct ContentView: View {
         }
     }
 
-    // Deserialize Function with Error Handling
+    // Deserialize Data with Error Handling
     func deserializeData() {
         guard let data = Data(base64Encoded: inputData) else {
             errorMessage = "Invalid input. Please provide valid Base64 data."
@@ -142,7 +208,7 @@ struct ContentView: View {
         }
     }
 
-    // Simulated Code Execution Function
+    // Execute Simulated Python Code
     func executePythonCode() {
         guard !inputData.isEmpty else {
             errorMessage = "No input data to execute."
