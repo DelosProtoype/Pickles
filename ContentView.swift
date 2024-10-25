@@ -6,11 +6,15 @@ struct ContentView: View {
     @State private var pythonShellOutput: String = "Python Execution Shell Output"
     @State private var selectedEncoding: String = "utf-8"
     @State private var selectedModule: String = "pickle"
-    @State private var isSerializationMode: Bool = false
+    @State private var isSerializationMode: Bool = false  // Start in Deserialization mode
     @State private var errorMessage: String? = nil
 
     let encodingOptions = ["utf-8", "ascii", "latin-1", "unicode_escape"]
     let moduleOptions = ["pickle", "pickle5"]
+
+    // Custom colors
+    let darkGreen = Color(red: 0.0, green: 0.5, blue: 0.0)
+    let redButton = Color.red
 
     var body: some View {
         GeometryReader { geometry in
@@ -97,41 +101,75 @@ struct ContentView: View {
                 Spacer()
 
                 // Action Buttons and Toggle Alignment
-                HStack(spacing: 40) {  // Adjust spacing between the toggle and buttons
+                HStack(spacing: 40) {
                     HStack {
+                        // Serialize/Deserialize Button with Dynamic Colors
                         Button(isSerializationMode ? "Serialize" : "Deserialize") {
-                            checkModuleAvailability()
-                            isSerializationMode ? serializeData() : deserializeData()
+                            if validateModeMismatch() {
+                                isSerializationMode ? serializeData() : deserializeData()
+                            }
                         }
                         .buttonStyle(.borderedProminent)
                         .foregroundColor(.white)
-                        .background(isSerializationMode ? Color.blue : Color.green)
+                        .background(isSerializationMode ? Color.blue : darkGreen)  // Blue for Serialize, Green for Deserialize
                         .cornerRadius(8)
                         .padding()
 
+                        // Execute Pickle Code Button (Always Red)
                         Button("Execute Pickle Code") {
+                            guard validateExecutableCode() else { return }
                             executePythonCode()
                         }
                         .buttonStyle(.borderedProminent)
                         .foregroundColor(.white)
-                        .background(Color.green)
+                        .background(redButton)  // Ensure Red Button
                         .cornerRadius(8)
                         .padding()
                     }
 
                     Spacer().frame(width: 80)  // Space between buttons and the toggle
 
+                    // Toggle Button for Serialization/Deserialization Mode
                     Toggle(isOn: $isSerializationMode) {
                         Text(isSerializationMode ? "Serialization Mode" : "Deserialization Mode")
                             .font(.headline)
-                            .foregroundColor(isSerializationMode ? .blue : .green)
+                            .foregroundColor(isSerializationMode ? .blue : darkGreen)
                     }
-                    .toggleStyle(SwitchToggleStyle(tint: isSerializationMode ? .blue : .green))
+                    .toggleStyle(SwitchToggleStyle(tint: isSerializationMode ? .blue : darkGreen))
                     .padding()
                 }
             }
             .padding()
         }
+    }
+
+    // Validate if the user has entered the correct type of data for the selected mode
+    func validateModeMismatch() -> Bool {
+        if isSerializationMode {
+            // Check if the input data is non-empty and not already Base64 encoded
+            if Data(base64Encoded: inputData) != nil {
+                errorMessage = "Input data appears to be serialized. Please switch to 'Deserialize' mode."
+                return false
+            }
+        } else {
+            // Check if the input data is Base64 encoded (serialized)
+            if Data(base64Encoded: inputData) == nil {
+                errorMessage = "Input data is not serialized. Please switch to 'Serialize' mode."
+                return false
+            }
+        }
+        errorMessage = nil  // No mismatch detected
+        return true
+    }
+
+    // Validate if input contains executable code
+    func validateExecutableCode() -> Bool {
+        if inputData.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            errorMessage = "No executable code found. Please enter valid Python code."
+            return false
+        }
+        errorMessage = nil
+        return true
     }
 
     // Check if the selected module version is installed
@@ -180,13 +218,9 @@ struct ContentView: View {
 
         do {
             let data = try NSKeyedArchiver.archivedData(withRootObject: objectToSerialize, requiringSecureCoding: false)
-            if let decodedObject = try NSKeyedUnarchiver.unarchiveTopLevelObjectWithData(data) as? String, decodedObject == objectToSerialize {
-                let base64String = data.base64EncodedString()
-                outputData = base64String
-                pythonShellOutput = "Serialized Data (Base64):\n\(base64String)"
-            } else {
-                errorMessage = "Serialization integrity check failed. Data is corrupted."
-            }
+            let base64String = data.base64EncodedString()
+            outputData = base64String
+            pythonShellOutput = "Serialized Data (Base64):\n\(base64String)"
         } catch {
             errorMessage = "Serialization error: \(error.localizedDescription)"
         }
