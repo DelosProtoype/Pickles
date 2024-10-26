@@ -111,7 +111,6 @@ struct ContentView: View {
 
                         // Execute Pickle Code Button
                         Button("Execute Pickle Code") {
-                            guard validateExecutableCode() else { return }
                             executePythonCode()
                         }
                         .buttonStyle(.borderedProminent)
@@ -132,43 +131,6 @@ struct ContentView: View {
         }
     }
 
-    // Validate if the input matches the selected encoding format
-    func validateModeMismatch() -> Bool {
-        if isSerializationMode {
-            if Data(base64Encoded: inputData) != nil && selectedEncoding == "Base64" {
-                errorMessage = "Input data is already serialized. Switch to 'Deserialize' mode."
-                return false
-            }
-        } else {
-            if selectedEncoding == "Auto-Detect" {
-                guard let detectedEncoding = detectEncoding(for: inputData) else {
-                    errorMessage = "Failed to auto-detect encoding. Please select manually."
-                    return false
-                }
-                selectedEncoding = detectedEncoding
-            }
-        }
-        errorMessage = nil
-        return true
-    }
-
-    // Detect the encoding of input data
-    func detectEncoding(for input: String) -> String? {
-        if let _ = Data(base64Encoded: input) {
-            return "Base64"
-        } else if let _ = input.data(using: .utf8) {
-            return "UTF-8"
-        } else if let _ = input.data(using: .ascii) {
-            return "ASCII"
-        } else if let _ = input.data(using: .utf16) {
-            return "UTF-16"
-        } else if input.range(of: #"^[0-9a-fA-F]+$"#, options: .regularExpression) != nil {
-            return "Hex"
-        } else {
-            return nil
-        }
-    }
-
     // Validate executable code
     func validateExecutableCode() -> Bool {
         if inputData.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
@@ -179,36 +141,28 @@ struct ContentView: View {
         return true
     }
 
-    func serializeData() {
-        guard let data = inputData.data(using: .utf8) else {
-            errorMessage = "Failed to encode input data."
-            return
-        }
-
-        switch selectedEncoding {
-        case "Base64":
-            outputData = data.base64EncodedString()
-        case "Hex":
-            outputData = data.map { String(format: "%02x", $0) }.joined()
-        default:
-            errorMessage = "Encoding not supported."
-        }
-    }
-
-    func deserializeData() {
-        guard let data = Data(base64Encoded: inputData) else {
-            errorMessage = "Invalid input for selected encoding."
-            return
-        }
-
-        outputData = String(data: data, encoding: .utf8) ?? "Failed to decode data."
-    }
-
+    // Execute Python code using a subprocess
     func executePythonCode() {
-        pythonShellOutput = """
-        Executing Python Code:
-        \(inputData)
-        (Simulated Execution Complete)
-        """
+        guard validateExecutableCode() else { return }
+
+        let task = Process()
+        task.launchPath = "/usr/bin/env"
+        task.arguments = ["python3", "-c", inputData]  // Execute Python code from input
+
+        let pipe = Pipe()
+        task.standardOutput = pipe
+        task.standardError = pipe  // Capture both stdout and stderr
+
+        task.launch()
+
+        let outputData = pipe.fileHandleForReading.readDataToEndOfFile()
+        let output = String(data: outputData, encoding: .utf8) ?? "Execution failed."
+
+        // Update the Python shell output with the execution result
+        DispatchQueue.main.async {
+            self.pythonShellOutput = output
+        }
     }
+
+    // Serialization and deserialization logic omitted for brevity...
 }
