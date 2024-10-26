@@ -29,6 +29,7 @@ struct ContentView: View {
                         }
                     }
                     .padding()
+                    .onChange(of: isSerializationMode) { _ in updateEncodingSelection() }
 
                     Picker("Select Module Version", selection: $selectedModule) {
                         ForEach(moduleOptions, id: \.self) { module in
@@ -77,7 +78,7 @@ struct ContentView: View {
                                 .frame(maxWidth: .infinity, alignment: .leading)
                                 .foregroundColor(.green)
                                 .font(.system(.body, design: .monospaced))
-                                .textSelection(.enabled)  // Enable text copying
+                                .textSelection(.enabled)
                         }
                         .frame(maxWidth: .infinity)
                         .background(Color.black)
@@ -101,7 +102,6 @@ struct ContentView: View {
                 // Action Buttons and File Handling Section
                 HStack(spacing: 40) {
                     HStack {
-                        // Serialize/Deserialize Button
                         Button(isSerializationMode ? "Serialize" : "Deserialize") {
                             if validateModeMismatch() {
                                 isSerializationMode ? serializeData() : deserializeData()
@@ -110,9 +110,8 @@ struct ContentView: View {
                         .buttonStyle(.borderedProminent)
                         .padding()
 
-                        // Execute Pickle Code Button
                         Button("Execute Pickle Code") {
-                            executePythonCode()
+                            executePythonCode()  // Correct function call
                         }
                         .buttonStyle(.borderedProminent)
                         .padding()
@@ -120,7 +119,6 @@ struct ContentView: View {
 
                     Spacer().frame(width: 80)
 
-                    // File Import and Export Buttons
                     Button("Import .pkl") {
                         importPickleFile()
                     }
@@ -146,6 +144,15 @@ struct ContentView: View {
         }
     }
 
+    // Ensure correct encoding selection when switching modes
+    func updateEncodingSelection() {
+        if isSerializationMode {
+            selectedEncoding = encodingOptionsForSerialization.first ?? "Base64"
+        } else {
+            selectedEncoding = "Auto-Detect"
+        }
+    }
+
     // Create a working directory in ~/Documents/Pickles
     func createWorkingDirectory() {
         let fileManager = FileManager.default
@@ -160,7 +167,100 @@ struct ContentView: View {
             }
         }
     }
-    
+
+    // Execute Python code from input
+    func executePythonCode() {
+        let task = Process()
+        task.launchPath = "/usr/bin/env"
+        task.arguments = ["python3", "-c", inputData]
+
+        let pipe = Pipe()
+        task.standardOutput = pipe
+        task.standardError = pipe
+
+        task.launch()
+        task.waitUntilExit()
+
+        let outputData = pipe.fileHandleForReading.readDataToEndOfFile()
+        pythonShellOutput = String(data: outputData, encoding: .utf8) ?? "Execution failed."
+    }
+
+    func validateModeMismatch() -> Bool {
+        if isSerializationMode {
+            if Data(base64Encoded: inputData) != nil {
+                errorMessage = "Input appears to be serialized. Switch to 'Deserialize' mode."
+                return false
+            }
+        }
+        return true
+    }
+
+    func serializeData() {
+        guard let data = inputData.data(using: .utf8) else {
+            errorMessage = "Failed to encode input data."
+            return
+        }
+        outputData = data.base64EncodedString()
+    }
+
+    func deserializeData() {
+        guard let data = Data(base64Encoded: inputData) else {
+            errorMessage = "Invalid input for deserialization."
+            return
+        }
+        outputData = String(data: data, encoding: .utf8) ?? "Failed to decode data."
+    }
+
+    func importPickleFile() {
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = [.init(filenameExtension: "pkl")!]
+        if panel.runModal() == .OK, let url = panel.url {
+            do {
+                let data = try Data(contentsOf: url)
+                let deserializedObject = try deserializePickleData(data)
+                inputData = "\(deserializedObject)"
+                outputData = "Imported Data:\n\(deserializedObject)"
+            } catch {
+                errorMessage = "Failed to import .pkl file: \(error.localizedDescription)"
+            }
+        }
+    }
+
+    func exportPickleFile() {
+        let panel = NSSavePanel()
+        panel.allowedContentTypes = [.init(filenameExtension: "pkl")!]
+        if panel.runModal() == .OK, let url = panel.url {
+            do {
+                let data = try serializeToPickle(outputData)
+                try data.write(to: url)
+            } catch {
+                errorMessage = "Failed to export .pkl file: \(error.localizedDescription)"
+            }
+        }
+    }
+
+    func serializeToPickle(_ data: String) throws -> Data {
+        let code = """
+        import pickle
+        data = pickle.dumps(\(data))
+        print(data)
+        """
+        return try runPythonCodeReturningData(code)
+    }
+
+    func deserializePickleData(_ data: Data) throws -> Any {
+        let tempFilePath = "/tmp/pickle_temp.pkl"
+        try data.write(to: URL(fileURLWithPath: tempFilePath))
+
+        let code = """
+        import pickle
+        with open('\(tempFilePath)', 'rb') as f:
+            data = pickle.load(f)
+        print(data)
+        """
+        return try runPythonCodeReturningData(code)
+    }
+
     func runPythonCodeReturningData(_ code: String) throws -> Data {
         let task = Process()
         task.launchPath = "/usr/bin/env"
@@ -179,118 +279,6 @@ struct ContentView: View {
                 NSLocalizedDescriptionKey: "Failed to execute Python code."
             ])
         }
-
         return outputData
-    }
-    
-    func serializeToPickle(_ data: String) throws -> Data {
-        // Python code to serialize data to a pickle object
-        let code = """
-        import pickle
-        data = pickle.dumps(\(data))
-        print(data)
-        """
-
-        // Run the Python code and return the result as binary data
-        return try runPythonCodeReturningData(code)
-    }
-    
-    
-    func deserializePickleData(_ data: Data) throws -> Any {
-        // Save data to a temporary file
-        let tempFilePath = "/tmp/pickle_temp.pkl"
-        try data.write(to: URL(fileURLWithPath: tempFilePath))
-
-        // Python code to load and print the pickle data
-        let code = """
-        import pickle
-        with open('\(tempFilePath)', 'rb') as f:
-            data = pickle.load(f)
-        print(data)
-        """
-
-        // Run the Python code and capture the output
-        return try runPythonCodeReturningData(code)
-    }
-    
-    
-    // Import a .pkl file and deserialize it
-    func importPickleFile() {
-        let panel = NSOpenPanel()
-        panel.allowedContentTypes = [.init(filenameExtension: "pkl")!]
-        panel.allowsMultipleSelection = false
-
-        if panel.runModal() == .OK, let url = panel.url {
-            do {
-                let data = try Data(contentsOf: url)
-                let deserializedObject = try deserializePickleData(data)
-                inputData = "\(deserializedObject)"
-                outputData = "Imported Data:\n\(deserializedObject)"
-            } catch {
-                errorMessage = "Failed to import .pkl file: \(error.localizedDescription)"
-            }
-        }
-    }
-
-    // Export the current output as a .pkl file
-    func exportPickleFile() {
-        let panel = NSOpenPanel()
-        panel.allowedContentTypes = [.init(filenameExtension: "pkl")!]
-        panel.nameFieldStringValue = "exported_data.pkl"
-
-        if panel.runModal() == .OK, let url = panel.url {
-            do {
-                let data = try serializeToPickle(outputData)
-                try data.write(to: url)
-            } catch {
-                errorMessage = "Failed to export .pkl file: \(error.localizedDescription)"
-            }
-        }
-    }
-
-    // Serialize data into pickle format
-    func serializeData() {
-        guard let data = inputData.data(using: .utf8) else {
-            errorMessage = "Failed to encode input data."
-            return
-        }
-        outputData = data.base64EncodedString()
-    }
-
-    // Deserialize data from pickle format
-    func deserializeData() {
-        guard let data = Data(base64Encoded: inputData) else {
-            errorMessage = "Invalid input for deserialization."
-            return
-        }
-        outputData = String(data: data, encoding: .utf8) ?? "Failed to decode data."
-    }
-
-    // Execute Python code
-    func executePythonCode() {
-        let task = Process()
-        task.launchPath = "/usr/bin/env"
-        task.arguments = ["python3", "-c", inputData]
-
-        let pipe = Pipe()
-        task.standardOutput = pipe
-        task.standardError = pipe
-
-        task.launch()
-        task.waitUntilExit()
-
-        let outputData = pipe.fileHandleForReading.readDataToEndOfFile()
-        pythonShellOutput = String(data: outputData, encoding: .utf8) ?? "Execution failed."
-    }
-
-    // Validate if the mode matches the input data
-    func validateModeMismatch() -> Bool {
-        if isSerializationMode {
-            if Data(base64Encoded: inputData) != nil {
-                errorMessage = "Input appears to be serialized. Switch to 'Deserialize' mode."
-                return false
-            }
-        }
-        return true
     }
 }
