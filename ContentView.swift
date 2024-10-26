@@ -204,11 +204,17 @@ struct ContentView: View {
     }
 
     func deserializeData() {
-        guard let data = Data(base64Encoded: inputData) else {
-            errorMessage = "Invalid input for deserialization."
+        guard let data = stringToData(inputData) else {
+            errorMessage = "Invalid input for deserialization. Please ensure valid binary data."
             return
         }
-        outputData = String(data: data, encoding: .utf8) ?? "Failed to decode data."
+
+        do {
+            let deserializedObject = try deserializePickleData(data)
+            outputData = "\(deserializedObject)"
+        } catch {
+            errorMessage = "Deserialization error: \(error.localizedDescription)"
+        }
     }
 
     func importPickleFile() {
@@ -249,18 +255,71 @@ struct ContentView: View {
     }
 
     func deserializePickleData(_ data: Data) throws -> Any {
+        // Save data to a temporary file
         let tempFilePath = "/tmp/pickle_temp.pkl"
         try data.write(to: URL(fileURLWithPath: tempFilePath))
 
+        // Python code to load and print the pickle data
         let code = """
         import pickle
         with open('\(tempFilePath)', 'rb') as f:
             data = pickle.load(f)
         print(data)
         """
-        return try runPythonCodeReturningData(code)
-    }
 
+        // Execute the Python code and capture output
+        let outputData = try runPythonCodeReturningData(code)
+
+        // Ensure the output is valid UTF-8 (or fall back)
+        guard let result = String(data: outputData, encoding: .utf8) else {
+            throw NSError(domain: "DeserializationError", code: 1, userInfo: [
+                NSLocalizedDescriptionKey: "Failed to decode deserialized data."
+            ])
+        }
+        
+        return result
+    }
+    
+    func stringToData(_ input: String) -> Data? {
+        // Ensure the input is non-empty
+        guard !input.isEmpty else {
+            print("Error: Input string is empty.")
+            return nil
+        }
+
+        // Remove the 'b' prefix and quotes if present
+        var cleanedString = input
+            .replacingOccurrences(of: "b'", with: "")
+            .replacingOccurrences(of: "'", with: "")
+
+        // Ensure cleanedString has an even number of characters
+        if cleanedString.count % 2 != 0 {
+            print("Error: Input string has an odd length.")
+            return nil
+        }
+
+        var byteArray: [UInt8] = []
+        var index = cleanedString.startIndex
+
+        while index < cleanedString.endIndex {
+            let nextIndex = cleanedString.index(index, offsetBy: 2, limitedBy: cleanedString.endIndex) ?? cleanedString.endIndex
+
+            // Ensure we have a valid 2-character slice
+            if nextIndex > index {
+                let byteString = String(cleanedString[index..<nextIndex])
+                if let byte = UInt8(byteString, radix: 16) {
+                    byteArray.append(byte)
+                } else {
+                    print("Error: Invalid byte string encountered - \(byteString)")
+                    return nil  // Invalid byte detected
+                }
+            }
+            index = nextIndex
+        }
+
+        return Data(byteArray)
+    }
+    
     func runPythonCodeReturningData(_ code: String) throws -> Data {
         let task = Process()
         task.launchPath = "/usr/bin/env"
