@@ -50,7 +50,7 @@ struct ContentView: View {
                     }
 
                     VStack(alignment: .leading) {
-                        Text("Output Data (Copyable):")
+                        Text("Output Data:")
                             .font(.headline)
                         ScrollView {
                             Text(outputData)
@@ -66,7 +66,7 @@ struct ContentView: View {
 
                 // Python Shell Output Section
                 VStack(alignment: .leading) {
-                    Text("Python Shell Output (Scrollable):")
+                    Text("Python Shell Output:")
                         .font(.headline)
                         .padding(.leading)
 
@@ -77,6 +77,7 @@ struct ContentView: View {
                                 .frame(maxWidth: .infinity, alignment: .leading)
                                 .foregroundColor(.green)
                                 .font(.system(.body, design: .monospaced))
+                                .textSelection(.enabled)  // Enable text copying
                         }
                         .frame(maxWidth: .infinity)
                         .background(Color.black)
