@@ -216,7 +216,7 @@ struct ContentView: View {
     // Import a .pkl file and deserialize it
     func importPickleFile() {
         let panel = NSOpenPanel()
-        panel.allowedFileTypes = ["pkl"]
+        panel.allowedContentTypes = [.init(filenameExtension: "pkl")!]
         panel.allowsMultipleSelection = false
 
         if panel.runModal() == .OK, let url = panel.url {
@@ -233,8 +233,8 @@ struct ContentView: View {
 
     // Export the current output as a .pkl file
     func exportPickleFile() {
-        let panel = NSSavePanel()
-        panel.allowedFileTypes = ["pkl"]
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = [.init(filenameExtension: "pkl")!]
         panel.nameFieldStringValue = "exported_data.pkl"
 
         if panel.runModal() == .OK, let url = panel.url {
