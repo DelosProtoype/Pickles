@@ -29,6 +29,9 @@ struct ContentView: View {
                         }
                     }
                     .padding()
+                    .onChange(of: isSerializationMode) { _ in
+                        autoDetectEncoding()
+                    }
 
                     Picker("Select Module Version", selection: $selectedModule) {
                         ForEach(moduleOptions, id: \.self) { module in
@@ -111,7 +114,6 @@ struct ContentView: View {
 
                         // Execute Pickle Code Button
                         Button("Execute Pickle Code") {
-                            guard validateExecutableCode() else { return }
                             executePythonCode()
                         }
                         .buttonStyle(.borderedProminent)
@@ -132,27 +134,19 @@ struct ContentView: View {
         }
     }
 
-    // Validate if the input matches the selected encoding format
-    func validateModeMismatch() -> Bool {
-        if isSerializationMode {
-            if Data(base64Encoded: inputData) != nil && selectedEncoding == "Base64" {
-                errorMessage = "Input data is already serialized. Switch to 'Deserialize' mode."
-                return false
-            }
+    // Auto-detect encoding based on input data
+    func autoDetectEncoding() {
+        guard !isSerializationMode else { return }  // Only auto-detect in deserialization mode
+
+        if let detectedEncoding = detectEncoding(for: inputData) {
+            selectedEncoding = detectedEncoding
         } else {
-            if selectedEncoding == "Auto-Detect" {
-                guard let detectedEncoding = detectEncoding(for: inputData) else {
-                    errorMessage = "Failed to auto-detect encoding. Please select manually."
-                    return false
-                }
-                selectedEncoding = detectedEncoding
-            }
+            selectedEncoding = "Auto-Detect"
+            errorMessage = "Failed to auto-detect encoding. Please select manually."
         }
-        errorMessage = nil
-        return true
     }
 
-    // Detect the encoding of input data
+    // Detect encoding of input data
     func detectEncoding(for input: String) -> String? {
         if let _ = Data(base64Encoded: input) {
             return "Base64"
@@ -169,6 +163,20 @@ struct ContentView: View {
         }
     }
 
+    // Validate if the input matches the selected encoding format
+    func validateModeMismatch() -> Bool {
+        if isSerializationMode {
+            if Data(base64Encoded: inputData) != nil && selectedEncoding == "Base64" {
+                errorMessage = "Input data is already serialized. Switch to 'Deserialize' mode."
+                return false
+            }
+        } else if selectedEncoding == "Auto-Detect" {
+            autoDetectEncoding()
+        }
+        errorMessage = nil
+        return true
+    }
+
     // Validate executable code
     func validateExecutableCode() -> Bool {
         if inputData.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
@@ -179,6 +187,29 @@ struct ContentView: View {
         return true
     }
 
+    // Execute Python code using a subprocess
+    func executePythonCode() {
+        guard validateExecutableCode() else { return }
+
+        let task = Process()
+        task.launchPath = "/usr/bin/env"
+        task.arguments = ["python3", "-c", inputData]
+
+        let pipe = Pipe()
+        task.standardOutput = pipe
+        task.standardError = pipe
+
+        task.launch()
+
+        let outputData = pipe.fileHandleForReading.readDataToEndOfFile()
+        let output = String(data: outputData, encoding: .utf8) ?? "Execution failed."
+
+        DispatchQueue.main.async {
+            self.pythonShellOutput = output
+        }
+    }
+
+    // Serialize input data
     func serializeData() {
         guard let data = inputData.data(using: .utf8) else {
             errorMessage = "Failed to encode input data."
@@ -195,6 +226,7 @@ struct ContentView: View {
         }
     }
 
+    // Deserialize input data
     func deserializeData() {
         guard let data = Data(base64Encoded: inputData) else {
             errorMessage = "Invalid input for selected encoding."
@@ -202,13 +234,5 @@ struct ContentView: View {
         }
 
         outputData = String(data: data, encoding: .utf8) ?? "Failed to decode data."
-    }
-
-    func executePythonCode() {
-        pythonShellOutput = """
-        Executing Python Code:
-        \(inputData)
-        (Simulated Execution Complete)
-        """
     }
 }
