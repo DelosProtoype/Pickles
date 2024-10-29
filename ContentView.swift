@@ -259,16 +259,24 @@ struct ContentView: View {
     }
 
     func convertPickleStringToData(_ input: String) -> Data? {
-        var cleanedString = input
+        // Clean and remove escape sequences
+        let cleanedString = input
             .replacingOccurrences(of: "b'", with: "")
             .replacingOccurrences(of: "'", with: "")
             .replacingOccurrences(of: "\\x", with: "")
 
+        // Ensure the cleaned string has an even number of characters
+        guard cleanedString.count % 2 == 0 else {
+            print("Error: Input string has an odd length.")
+            return nil
+        }
+
+        // Convert hex string to binary data
         var byteArray: [UInt8] = []
         var index = cleanedString.startIndex
 
         while index < cleanedString.endIndex {
-            let nextIndex = cleanedString.index(index, offsetBy: 2, limitedBy: cleanedString.endIndex) ?? cleanedString.endIndex
+            let nextIndex = cleanedString.index(index, offsetBy: 2)
             let byteString = String(cleanedString[index..<nextIndex])
             if let byte = UInt8(byteString, radix: 16) {
                 byteArray.append(byte)
