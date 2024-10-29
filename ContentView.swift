@@ -183,23 +183,38 @@ struct ContentView: View {
     func serializeToPickle(_ input: String) throws -> Data {
         let code = """
         import pickle
+        import sys
         data = pickle.dumps('\(input)')
-        print(data)
+        sys.stdout.buffer.write(data)
         """
+
+        // Run the Python code and return the binary result directly
         return try runPythonCodeReturningData(code)
     }
 
     func deserializePickleData(_ data: Data) throws -> Any {
+        // Save the binary data to a temporary file
         let tempFilePath = "/tmp/pickle_temp.pkl"
         try data.write(to: URL(fileURLWithPath: tempFilePath))
 
+        // Python code to load the pickle data and print the result
         let code = """
         import pickle
         with open('\(tempFilePath)', 'rb') as f:
             obj = pickle.load(f)
         print(obj)
         """
-        return try runPythonCodeReturningData(code)
+
+        // Run the Python code and capture the output
+        let outputData = try runPythonCodeReturningData(code)
+
+        // Ensure the output is valid UTF-8
+        guard let result = String(data: outputData, encoding: .utf8) else {
+            throw NSError(domain: "DeserializationError", code: 1, userInfo: [
+                NSLocalizedDescriptionKey: "Failed to decode deserialized data."
+            ])
+        }
+        return result
     }
 
     func serializeData() {
