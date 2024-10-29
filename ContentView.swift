@@ -9,8 +9,8 @@ struct ContentView: View {
     @State private var isSerializationMode: Bool = false  // Start in Deserialization mode
     @State private var errorMessage: String? = nil
 
-    let encodingOptionsForSerialization = ["Base64", "UTF-8", "ASCII", "UTF-16", "Latin-1", "Hex"]
-    let encodingOptionsForDeserialization = ["Auto-Detect", "Base64", "UTF-8", "ASCII", "UTF-16", "Latin-1", "Hex"]
+    let encodingOptionsForSerialization = ["Base64", "UTF-8", "ASCII", "UTF-16", "Latin-1", "Hex", "Pickle Byte String"]
+    let encodingOptionsForDeserialization = ["Auto-Detect", "Base64", "UTF-8", "ASCII", "UTF-16", "Latin-1", "Hex", "Pickle Byte String"]
     let moduleOptions = ["pickle", "pickle5"]
 
     var body: some View {
@@ -21,7 +21,6 @@ struct ContentView: View {
                     .fontWeight(.bold)
                     .padding(.top)
 
-                // Encoding and Module Selection
                 HStack(spacing: 20) {
                     Picker("Select Encoding Format", selection: $selectedEncoding) {
                         ForEach(isSerializationMode ? encodingOptionsForSerialization : encodingOptionsForDeserialization, id: \.self) { encoding in
@@ -39,7 +38,6 @@ struct ContentView: View {
                     .padding()
                 }
 
-                // Input and Output Sections with Labels
                 HStack(spacing: 20) {
                     VStack(alignment: .leading) {
                         Text("Input Data:")
@@ -65,7 +63,6 @@ struct ContentView: View {
                     }
                 }
 
-                // Python Shell Output Section
                 VStack(alignment: .leading) {
                     Text("Python Shell Output:")
                         .font(.headline)
@@ -89,7 +86,6 @@ struct ContentView: View {
                     .padding([.leading, .trailing])
                 }
 
-                // Error Message Display (Above Buttons)
                 if let errorMessage = errorMessage {
                     Text("Error: \(errorMessage)")
                         .foregroundColor(.red)
@@ -99,25 +95,20 @@ struct ContentView: View {
 
                 Spacer()
 
-                // Action Buttons and File Handling Section
                 HStack(spacing: 40) {
-                    HStack {
-                        Button(isSerializationMode ? "Serialize" : "Deserialize") {
-                            if validateModeMismatch() {
-                                isSerializationMode ? serializeData() : deserializeData()
-                            }
+                    Button(isSerializationMode ? "Serialize" : "Deserialize") {
+                        if validateModeMismatch() {
+                            isSerializationMode ? serializeData() : deserializeData()
                         }
-                        .buttonStyle(.borderedProminent)
-                        .padding()
-
-                        Button("Execute Pickle Code") {
-                            executePythonCode()  // Correct function call
-                        }
-                        .buttonStyle(.borderedProminent)
-                        .padding()
                     }
+                    .buttonStyle(.borderedProminent)
+                    .padding()
 
-                    Spacer().frame(width: 80)
+                    Button("Execute Pickle Code") {
+                        executePythonCode()
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .padding()
 
                     Button("Import .pkl") {
                         importPickleFile()
@@ -168,11 +159,10 @@ struct ContentView: View {
         }
     }
 
-    // Execute Python code from input
-    func executePythonCode() {
+    func runPythonCodeReturningData(_ code: String) throws -> Data {
         let task = Process()
         task.launchPath = "/usr/bin/env"
-        task.arguments = ["python3", "-c", inputData]
+        task.arguments = ["python3", "-c", code]
 
         let pipe = Pipe()
         task.standardOutput = pipe
@@ -182,39 +172,95 @@ struct ContentView: View {
         task.waitUntilExit()
 
         let outputData = pipe.fileHandleForReading.readDataToEndOfFile()
-        pythonShellOutput = String(data: outputData, encoding: .utf8) ?? "Execution failed."
+        if task.terminationStatus != 0 {
+            throw NSError(domain: "PythonExecutionError", code: 1, userInfo: [
+                NSLocalizedDescriptionKey: "Failed to execute Python code."
+            ])
+        }
+        return outputData
     }
 
-    func validateModeMismatch() -> Bool {
-        if isSerializationMode {
-            if Data(base64Encoded: inputData) != nil {
-                errorMessage = "Input appears to be serialized. Switch to 'Deserialize' mode."
-                return false
-            }
-        }
-        return true
+    func serializeToPickle(_ input: String) throws -> Data {
+        let code = """
+        import pickle
+        data = pickle.dumps('\(input)')
+        print(data)
+        """
+        return try runPythonCodeReturningData(code)
+    }
+
+    func deserializePickleData(_ data: Data) throws -> Any {
+        let tempFilePath = "/tmp/pickle_temp.pkl"
+        try data.write(to: URL(fileURLWithPath: tempFilePath))
+
+        let code = """
+        import pickle
+        with open('\(tempFilePath)', 'rb') as f:
+            obj = pickle.load(f)
+        print(obj)
+        """
+        return try runPythonCodeReturningData(code)
     }
 
     func serializeData() {
-        guard let data = inputData.data(using: .utf8) else {
-            errorMessage = "Failed to encode input data."
-            return
+        switch selectedEncoding {
+        case "Pickle Byte String":
+            do {
+                let data = try serializeToPickle(inputData)
+                outputData = data.map { String(format: "\\x%02x", $0) }.joined()
+            } catch {
+                errorMessage = "Serialization error: \(error.localizedDescription)"
+            }
+        default:
+            guard let data = inputData.data(using: .utf8) else {
+                errorMessage = "Failed to encode input data."
+                return
+            }
+            outputData = data.base64EncodedString()
         }
-        outputData = data.base64EncodedString()
     }
 
     func deserializeData() {
-        guard let data = stringToData(inputData) else {
-            errorMessage = "Invalid input for deserialization. Please ensure valid binary data."
-            return
-        }
+        if selectedEncoding == "Pickle Byte String" {
+            guard let data = convertPickleStringToData(inputData) else {
+                errorMessage = "Invalid Pickle Byte String input."
+                return
+            }
 
-        do {
-            let deserializedObject = try deserializePickleData(data)
-            outputData = "\(deserializedObject)"
-        } catch {
-            errorMessage = "Deserialization error: \(error.localizedDescription)"
+            do {
+                let deserializedObject = try deserializePickleData(data)
+                outputData = "\(deserializedObject)"
+            } catch {
+                errorMessage = "Deserialization error: \(error.localizedDescription)"
+            }
+        } else {
+            // Handle other encodings, such as Base64
+            guard let data = Data(base64Encoded: inputData) else {
+                errorMessage = "Invalid input for deserialization."
+                return
+            }
+            outputData = String(data: data, encoding: .utf8) ?? "Failed to decode data."
         }
+    }
+
+    func convertPickleStringToData(_ input: String) -> Data? {
+        var cleanedString = input
+            .replacingOccurrences(of: "b'", with: "")
+            .replacingOccurrences(of: "'", with: "")
+            .replacingOccurrences(of: "\\x", with: "")
+
+        var byteArray: [UInt8] = []
+        var index = cleanedString.startIndex
+
+        while index < cleanedString.endIndex {
+            let nextIndex = cleanedString.index(index, offsetBy: 2, limitedBy: cleanedString.endIndex) ?? cleanedString.endIndex
+            let byteString = String(cleanedString[index..<nextIndex])
+            if let byte = UInt8(byteString, radix: 16) {
+                byteArray.append(byte)
+            }
+            index = nextIndex
+        }
+        return Data(byteArray)
     }
 
     func importPickleFile() {
@@ -245,85 +291,18 @@ struct ContentView: View {
         }
     }
 
-    func serializeToPickle(_ data: String) throws -> Data {
-        let code = """
-        import pickle
-        data = pickle.dumps(\(data))
-        print(data)
-        """
-        return try runPythonCodeReturningData(code)
+    func validateModeMismatch() -> Bool {
+        if isSerializationMode, Data(base64Encoded: inputData) != nil {
+            errorMessage = "Input appears to be serialized. Switch to 'Deserialize' mode."
+            return false
+        }
+        return true
     }
 
-    func deserializePickleData(_ data: Data) throws -> Any {
-        // Save data to a temporary file
-        let tempFilePath = "/tmp/pickle_temp.pkl"
-        try data.write(to: URL(fileURLWithPath: tempFilePath))
-
-        // Python code to load and print the pickle data
-        let code = """
-        import pickle
-        with open('\(tempFilePath)', 'rb') as f:
-            data = pickle.load(f)
-        print(data)
-        """
-
-        // Execute the Python code and capture output
-        let outputData = try runPythonCodeReturningData(code)
-
-        // Ensure the output is valid UTF-8 (or fall back)
-        guard let result = String(data: outputData, encoding: .utf8) else {
-            throw NSError(domain: "DeserializationError", code: 1, userInfo: [
-                NSLocalizedDescriptionKey: "Failed to decode deserialized data."
-            ])
-        }
-        
-        return result
-    }
-    
-    func stringToData(_ input: String) -> Data? {
-        // Ensure the input is non-empty
-        guard !input.isEmpty else {
-            print("Error: Input string is empty.")
-            return nil
-        }
-
-        // Remove the 'b' prefix and quotes if present
-        var cleanedString = input
-            .replacingOccurrences(of: "b'", with: "")
-            .replacingOccurrences(of: "'", with: "")
-
-        // Ensure cleanedString has an even number of characters
-        if cleanedString.count % 2 != 0 {
-            print("Error: Input string has an odd length.")
-            return nil
-        }
-
-        var byteArray: [UInt8] = []
-        var index = cleanedString.startIndex
-
-        while index < cleanedString.endIndex {
-            let nextIndex = cleanedString.index(index, offsetBy: 2, limitedBy: cleanedString.endIndex) ?? cleanedString.endIndex
-
-            // Ensure we have a valid 2-character slice
-            if nextIndex > index {
-                let byteString = String(cleanedString[index..<nextIndex])
-                if let byte = UInt8(byteString, radix: 16) {
-                    byteArray.append(byte)
-                } else {
-                    print("Error: Invalid byte string encountered - \(byteString)")
-                    return nil  // Invalid byte detected
-                }
-            }
-            index = nextIndex
-        }
-
-        return Data(byteArray)
-    }
-    
-    func runPythonCodeReturningData(_ code: String) throws -> Data {
+    func executePythonCode() {
         let task = Process()
         task.launchPath = "/usr/bin/env"
-        task.arguments = ["python3", "-c", code]
+        task.arguments = ["python3", "-c", inputData]
 
         let pipe = Pipe()
         task.standardOutput = pipe
@@ -333,11 +312,6 @@ struct ContentView: View {
         task.waitUntilExit()
 
         let outputData = pipe.fileHandleForReading.readDataToEndOfFile()
-        if task.terminationStatus != 0 {
-            throw NSError(domain: "PythonExecutionError", code: 1, userInfo: [
-                NSLocalizedDescriptionKey: "Failed to execute Python code."
-            ])
-        }
-        return outputData
+        pythonShellOutput = String(data: outputData, encoding: .utf8) ?? "Execution failed."
     }
 }
