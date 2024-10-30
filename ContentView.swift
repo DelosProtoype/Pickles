@@ -13,7 +13,10 @@ struct ContentView: View {
     @State private var selectedModule: String = "pickle"
     @State private var isSerializationMode: Bool = false  // Start in Deserialization mode
     @State private var errorMessage: String? = nil
-
+    @State private var progressValue: Double = 0.0  // Track progress
+    @State private var isProcessing: Bool = false  // Track if processing is ongoing
+    @State private var taskDescription: String = ""
+    
     let encodingOptionsForSerialization = ["Base64", "UTF-8", "ASCII", "UTF-16", "Latin-1", "Hex", "Pickle Byte String"]
     let encodingOptionsForDeserialization = ["Auto-Detect", "Base64", "UTF-8", "ASCII", "UTF-16", "Latin-1", "Hex", "Pickle Byte String"]
     let moduleOptions = ["pickle", "pickle5"]
@@ -135,8 +138,8 @@ struct ContentView: View {
             }
             .padding()
             .onAppear {
-                createWorkingDirectory()
-            }
+                         _ = createWorkingDirectory()  // Ensure the working directory is created on app launch
+                     }
         }
     }
 
@@ -150,24 +153,38 @@ struct ContentView: View {
     }
 
     // Create a working directory in ~/Documents/Pickles
-    func createWorkingDirectory() {
+    func createWorkingDirectory() -> URL? {
         let fileManager = FileManager.default
-        let documentsPath = fileManager.urls(for: .documentDirectory, in: .userDomainMask).first!
-        let picklesDirectory = documentsPath.appendingPathComponent("Pickles")
+        guard let documentsPath = fileManager.urls(for: .documentDirectory, in: .userDomainMask).first else {
+            errorMessage = "Failed to access the Documents directory."
+            return nil
+        }
 
+        let picklesDirectory = documentsPath.appendingPathComponent("PicklesApp")
+
+        // Create the directory if it does not exist
         if !fileManager.fileExists(atPath: picklesDirectory.path) {
             do {
                 try fileManager.createDirectory(at: picklesDirectory, withIntermediateDirectories: true, attributes: nil)
+                print("Working directory created at: \(picklesDirectory.path)")
             } catch {
                 errorMessage = "Failed to create working directory: \(error.localizedDescription)"
+                return nil
             }
         }
+
+        return picklesDirectory
     }
 
     func runPythonCodeReturningData(_ code: String) throws -> Data {
         let task = Process()
         task.launchPath = "/usr/bin/env"
         task.arguments = ["python3", "-c", code]
+
+        // Set the working directory to ~/Documents/PicklesApp
+        if let workingDirectory = createWorkingDirectory()?.path {
+            task.currentDirectoryPath = workingDirectory
+        }
 
         let pipe = Pipe()
         task.standardOutput = pipe
@@ -182,6 +199,7 @@ struct ContentView: View {
                 NSLocalizedDescriptionKey: "Failed to execute Python code."
             ])
         }
+
         return outputData
     }
 
@@ -198,14 +216,28 @@ struct ContentView: View {
     }
 
     func deserializePickleData(_ data: Data) throws -> Any {
-        // Save the binary data to a temporary file
-        let tempFilePath = "/tmp/pickle_temp.pkl"
-        try data.write(to: URL(fileURLWithPath: tempFilePath))
+        // Create or access the working directory
+        guard let workingDirectory = createWorkingDirectory() else {
+            throw NSError(domain: "DeserializationError", code: 1, userInfo: [
+                NSLocalizedDescriptionKey: "Failed to access the working directory."
+            ])
+        }
+
+        // Save the binary data to a temporary file in the working directory
+        let tempFilePath = workingDirectory.appendingPathComponent("pickle_temp.pkl")
+
+        do {
+            try data.write(to: tempFilePath)
+        } catch {
+            throw NSError(domain: "FileWriteError", code: 1, userInfo: [
+                NSLocalizedDescriptionKey: "Failed to save the file '\(tempFilePath.lastPathComponent)'."
+            ])
+        }
 
         // Python code to load the pickle data and print the result
         let code = """
         import pickle
-        with open('\(tempFilePath)', 'rb') as f:
+        with open('\(tempFilePath.path)', 'rb') as f:
             obj = pickle.load(f)
         print(obj)
         """
@@ -215,10 +247,11 @@ struct ContentView: View {
 
         // Ensure the output is valid UTF-8
         guard let result = String(data: outputData, encoding: .utf8) else {
-            throw NSError(domain: "DeserializationError", code: 1, userInfo: [
+            throw NSError(domain: "DeserializationError", code: 2, userInfo: [
                 NSLocalizedDescriptionKey: "Failed to decode deserialized data."
             ])
         }
+
         return result
     }
 
@@ -292,33 +325,50 @@ struct ContentView: View {
     }
 
     func importPickleFile() {
-        let panel = NSOpenPanel()
-        panel.allowedContentTypes = [.init(filenameExtension: "pkl")!]
-        if panel.runModal() == .OK, let url = panel.url {
+        guard let directory = createWorkingDirectory() else {
+            errorMessage = "Unable to create or access the working directory."
+            return
+        }
+
+        let openPanel = NSOpenPanel()
+        openPanel.directoryURL = directory
+        openPanel.allowedContentTypes = [.init(filenameExtension: "pkl")!]
+        openPanel.allowsMultipleSelection = false
+
+        if openPanel.runModal() == .OK, let url = openPanel.url {
             do {
                 let data = try Data(contentsOf: url)
                 let deserializedObject = try deserializePickleData(data)
                 inputData = "\(deserializedObject)"
                 outputData = "Imported Data:\n\(deserializedObject)"
-            } catch {
-                errorMessage = "Failed to import .pkl file: \(error.localizedDescription)"
+            } catch let error as NSError {
+                if error.domain == NSCocoaErrorDomain && error.code == NSFileWriteNoPermissionError {
+                    errorMessage = "You don’t have permission to save the file. Please check your directory permissions."
+                } else {
+                    errorMessage = "Failed to import .pkl file: \(error.localizedDescription)"
+                }
             }
         }
     }
 
     func exportPickleFile() {
-        let panel = NSSavePanel()
-        panel.allowedContentTypes = [.init(filenameExtension: "pkl")!]
-        if panel.runModal() == .OK, let url = panel.url {
-            do {
-                let data = try serializeToPickle(outputData)
-                try data.write(to: url)
-            } catch {
-                errorMessage = "Failed to export .pkl file: \(error.localizedDescription)"
-            }
+        guard let directory = createWorkingDirectory() else {
+            errorMessage = "Unable to create or access the working directory."
+            return
+        }
+
+        let exportURL = directory.appendingPathComponent("exported_data.pkl")
+
+        do {
+            let data = try serializeToPickle(outputData)
+            try data.write(to: exportURL)
+            print("Exported to: \(exportURL.path)")
+        } catch {
+            errorMessage = "Failed to export .pkl file: \(error.localizedDescription)"
         }
     }
-
+    
+    
     func validateModeMismatch() -> Bool {
         if isSerializationMode {
             // Check if input appears to be serialized data
@@ -357,7 +407,6 @@ struct ContentView: View {
         
         return true
     }
-    
     func executePythonCode() {
         let task = Process()
         task.launchPath = "/usr/bin/env"
@@ -374,3 +423,4 @@ struct ContentView: View {
         pythonShellOutput = String(data: outputData, encoding: .utf8) ?? "Execution failed."
     }
 }
+
