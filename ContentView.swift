@@ -28,7 +28,16 @@ struct ContentView: View {
                     .font(.largeTitle)
                     .fontWeight(.bold)
                     .padding(.top)
-
+                
+                if isProcessing {
+                           VStack {
+                               Text(taskDescription)
+                                   .font(.headline)
+                               ProgressView(value: progressValue, total: 1.0)
+                                   .padding()
+                           }
+                       }
+                
                 HStack(spacing: 20) {
                     Picker("Select Encoding Format", selection: $selectedEncoding) {
                         ForEach(isSerializationMode ? encodingOptionsForSerialization : encodingOptionsForDeserialization, id: \.self) { encoding in
@@ -142,7 +151,90 @@ struct ContentView: View {
                      }
         }
     }
+    
+    func startSerialization() {
+        isProcessing = true
+        taskDescription = "Serializing Data..."
+        progressValue = 0.0
 
+        DispatchQueue.global(qos: .background).async {
+            let totalBytes = self.inputData.count
+            var processedBytes = 0
+
+            var serializedData = Data()
+
+            for chunk in self.inputData.split(by: 1024) {  // 1 KB chunks
+                // Simulate processing time (for testing)
+                Thread.sleep(forTimeInterval: 0.05)
+
+                // Serialize chunk to pickle format
+                if let chunkData = chunk.data(using: .utf8) {
+                    serializedData.append(chunkData)
+                }
+
+                processedBytes += chunk.count
+                let progress = Double(processedBytes) / Double(totalBytes)
+
+                // Update progress on the main thread
+                DispatchQueue.main.async {
+                    self.progressValue = progress
+                }
+            }
+
+            DispatchQueue.main.async {
+                self.outputData = serializedData.base64EncodedString()
+                self.isProcessing = false
+                self.progressValue = 1.0
+            }
+        }
+    }
+    
+    func startDeserialization() {
+        isProcessing = true
+        taskDescription = "Deserializing Data..."
+        progressValue = 0.0
+
+        DispatchQueue.global(qos: .background).async {
+            guard let data = Data(base64Encoded: self.inputData) else {
+                DispatchQueue.main.async {
+                    self.errorMessage = "Invalid input for deserialization."
+                    self.isProcessing = false
+                }
+                return
+            }
+
+            let totalBytes = data.count
+            var processedBytes = 0
+
+            var deserializedString = ""
+
+            for chunk in data.chunked(by: 1024) {  // Process 1 KB at a time
+                // Simulate processing time (for testing)
+                Thread.sleep(forTimeInterval: 0.05)
+
+                // Decode chunk into string format
+                if let chunkString = String(data: chunk, encoding: .utf8) {
+                    deserializedString += chunkString
+                }
+
+                processedBytes += chunk.count
+                let progress = Double(processedBytes) / Double(totalBytes)
+
+                // Update progress on the main thread
+                DispatchQueue.main.async {
+                    self.progressValue = progress
+                }
+            }
+
+            DispatchQueue.main.async {
+                self.outputData = deserializedString
+                self.isProcessing = false
+                self.progressValue = 1.0
+            }
+        }
+    }
+    
+    
     // Ensure correct encoding selection when switching modes
     func updateEncodingSelection() {
         if isSerializationMode {
@@ -423,4 +515,37 @@ struct ContentView: View {
         pythonShellOutput = String(data: outputData, encoding: .utf8) ?? "Execution failed."
     }
 }
+
+extension String {
+    func split(by length: Int) -> [String] {
+        var result: [String] = []
+        var currentIndex = startIndex
+
+        while currentIndex < endIndex {
+            let nextIndex = index(currentIndex, offsetBy: length, limitedBy: endIndex) ?? endIndex
+            let chunk = String(self[currentIndex..<nextIndex])
+            result.append(chunk)
+            currentIndex = nextIndex
+        }
+
+        return result
+    }
+}
+
+extension Data {
+    func chunked(by length: Int) -> [Data] {
+        var chunks: [Data] = []
+        var index = 0
+
+        while index < count {
+            let chunkSize = Swift.min(length, count - index)
+            let chunk = self.subdata(in: index..<index + chunkSize)
+            chunks.append(chunk)
+            index += chunkSize
+        }
+
+        return chunks
+    }
+}
+
 
