@@ -22,6 +22,8 @@ struct ContentView: View {
     let moduleOptions = ["pickle", "pickle5"]
 
     var body: some View {
+        
+        
         GeometryReader { geometry in
             VStack(alignment: .leading, spacing: 20) {
                 Text("Pickles - Data Serializer & Deserializer")
@@ -29,14 +31,6 @@ struct ContentView: View {
                     .fontWeight(.bold)
                     .padding(.top)
                 
-                if isProcessing {
-                           VStack {
-                               Text(taskDescription)
-                                   .font(.headline)
-                               ProgressView(value: progressValue, total: 1.0)
-                                   .padding()
-                           }
-                       }
                 
                 HStack(spacing: 20) {
                     Picker("Select Encoding Format", selection: $selectedEncoding) {
@@ -46,7 +40,7 @@ struct ContentView: View {
                     }
                     .padding()
                     .onChange(of: isSerializationMode) { _ in updateEncodingSelection() }
-
+                    
                     Picker("Select Module Version", selection: $selectedModule) {
                         ForEach(moduleOptions, id: \.self) { module in
                             Text(module).tag(module)
@@ -54,7 +48,7 @@ struct ContentView: View {
                     }
                     .padding()
                 }
-
+                
                 HStack(spacing: 20) {
                     VStack(alignment: .leading) {
                         Text("Input Data:")
@@ -64,7 +58,7 @@ struct ContentView: View {
                             .frame(height: geometry.size.height * 0.25)
                             .padding()
                     }
-
+                    
                     VStack(alignment: .leading) {
                         Text("Output Data:")
                             .font(.headline)
@@ -79,12 +73,12 @@ struct ContentView: View {
                         .padding()
                     }
                 }
-
+                
                 VStack(alignment: .leading) {
                     Text("Python Shell Output:")
                         .font(.headline)
                         .padding(.leading)
-
+                    
                     ScrollView {
                         VStack {
                             Text(pythonShellOutput)
@@ -102,16 +96,16 @@ struct ContentView: View {
                     .border(Color.gray, width: 1)
                     .padding([.leading, .trailing])
                 }
-
+                
                 if let errorMessage = errorMessage {
                     Text("Error: \(errorMessage)")
                         .foregroundColor(.red)
                         .padding(.horizontal)
                         .padding(.bottom, 5)
                 }
-
+                
                 Spacer()
-
+                
                 HStack(spacing: 40) {
                     Button(isSerializationMode ? "Serialize" : "Deserialize") {
                         if validateModeMismatch() {
@@ -120,23 +114,23 @@ struct ContentView: View {
                     }
                     .buttonStyle(.borderedProminent)
                     .padding()
-
+                    
                     Button("Execute Pickle Code") {
                         executePythonCode()
                     }
                     .buttonStyle(.borderedProminent)
                     .padding()
-
+                    
                     Button("Import .pkl") {
                         importPickleFile()
                     }
                     .buttonStyle(.bordered)
-
+                    
                     Button("Export .pkl") {
                         exportPickleFile()
                     }
                     .buttonStyle(.bordered)
-
+                    
                     Toggle(isOn: $isSerializationMode) {
                         Text(isSerializationMode ? "Serialization Mode" : "Deserialization Mode")
                             .font(.headline)
@@ -147,9 +141,13 @@ struct ContentView: View {
             }
             .padding()
             .onAppear {
-                         _ = createWorkingDirectory()  // Ensure the working directory is created on app launch
-                     }
+                _ = createWorkingDirectory()  // Ensure the working directory is created on app launch
+            }
         }
+        .sheet(isPresented: $isProcessing) {
+            PopupProgressView(progressValue: $progressValue, taskDescription: $taskDescription, isProcessing: $isProcessing)
+        }
+        
     }
     
     func startSerialization() {
@@ -158,18 +156,21 @@ struct ContentView: View {
         progressValue = 0.0
 
         DispatchQueue.global(qos: .background).async {
-            let totalBytes = self.inputData.count
+            let totalBytes = inputData.count
             var processedBytes = 0
+
             var serializedData = Data()
 
-            for chunk in self.inputData.split(by: 1024) {
-                Thread.sleep(forTimeInterval: 0.05)
+            for chunk in inputData.split(by: 1024) {  // Process in 1 KB chunks
+                Thread.sleep(forTimeInterval: 0.01)  // Simulate processing
+
                 if let chunkData = chunk.data(using: .utf8) {
                     serializedData.append(chunkData)
                 }
 
                 processedBytes += chunk.count
                 let progress = Double(processedBytes) / Double(totalBytes)
+
                 DispatchQueue.main.async {
                     self.progressValue = progress
                 }
@@ -177,8 +178,7 @@ struct ContentView: View {
 
             DispatchQueue.main.async {
                 self.outputData = serializedData.base64EncodedString()
-                self.isProcessing = false
-                self.progressValue = 1.0
+                self.isProcessing = false  // Dismiss popup on completion
             }
         }
     }
@@ -189,10 +189,10 @@ struct ContentView: View {
         progressValue = 0.0
 
         DispatchQueue.global(qos: .background).async {
-            guard let data = Data(base64Encoded: self.inputData) else {
+            guard let data = Data(base64Encoded: inputData) else {
                 DispatchQueue.main.async {
-                    self.errorMessage = "Invalid input for deserialization."
-                    self.isProcessing = false
+                    errorMessage = "Invalid input for deserialization."
+                    isProcessing = false
                 }
                 return
             }
@@ -201,14 +201,16 @@ struct ContentView: View {
             var processedBytes = 0
             var deserializedString = ""
 
-            for chunk in data.chunked(by: 1024) {
-                Thread.sleep(forTimeInterval: 0.05)
+            for chunk in data.chunked(by: 1024) {  // Process in 1 KB chunks
+                Thread.sleep(forTimeInterval: 0.01)  // Simulate processing
+
                 if let chunkString = String(data: chunk, encoding: .utf8) {
                     deserializedString += chunkString
                 }
 
                 processedBytes += chunk.count
                 let progress = Double(processedBytes) / Double(totalBytes)
+
                 DispatchQueue.main.async {
                     self.progressValue = progress
                 }
@@ -216,8 +218,7 @@ struct ContentView: View {
 
             DispatchQueue.main.async {
                 self.outputData = deserializedString
-                self.isProcessing = false
-                self.progressValue = 1.0
+                self.isProcessing = false  // Dismiss popup on completion
             }
         }
     }
@@ -406,16 +407,49 @@ struct ContentView: View {
         openPanel.allowsMultipleSelection = false
 
         if openPanel.runModal() == .OK, let url = openPanel.url {
-            do {
-                let data = try Data(contentsOf: url)
-                let deserializedObject = try deserializePickleData(data)
-                inputData = "\(deserializedObject)"
-                outputData = "Imported Data:\n\(deserializedObject)"
-            } catch let error as NSError {
-                if error.domain == NSCocoaErrorDomain && error.code == NSFileWriteNoPermissionError {
-                    errorMessage = "You don’t have permission to save the file. Please check your directory permissions."
-                } else {
-                    errorMessage = "Failed to import .pkl file: \(error.localizedDescription)"
+            isProcessing = true
+            taskDescription = "Importing Data..."
+            progressValue = 0.0
+
+            DispatchQueue.global(qos: .background).async {
+                do {
+                    let data = try Data(contentsOf: url)
+                    let totalBytes = data.count
+                    var processedBytes = 0
+
+                    // Process in chunks to avoid memory overload and update progress
+                    for chunk in data.chunked(by: 1024) {
+                        Thread.sleep(forTimeInterval: 0.05)  // Simulate processing delay
+
+                        processedBytes += chunk.count
+                        let progress = Double(processedBytes) / Double(totalBytes)
+
+                        // Update the progress on the main thread
+                        DispatchQueue.main.async {
+                            self.progressValue = progress
+                        }
+                    }
+
+                    // Deserialize the data on the main thread
+                    DispatchQueue.main.async {
+                        do {
+                            let deserializedObject = try self.deserializePickleData(data)
+                            self.inputData = "\(deserializedObject)"
+                            self.outputData = "Imported Data:\n\(deserializedObject)"
+                        } catch {
+                            self.errorMessage = "Deserialization error: \(error.localizedDescription)"
+                        }
+
+                        // Final UI updates
+                        self.isProcessing = false
+                        self.progressValue = 1.0
+                    }
+                } catch {
+                    // Handle import error
+                    DispatchQueue.main.async {
+                        self.errorMessage = "Failed to import .pkl file: \(error.localizedDescription)"
+                        self.isProcessing = false
+                    }
                 }
             }
         }
