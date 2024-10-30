@@ -320,13 +320,44 @@ struct ContentView: View {
     }
 
     func validateModeMismatch() -> Bool {
-        if isSerializationMode, Data(base64Encoded: inputData) != nil {
-            errorMessage = "Input appears to be serialized. Switch to 'Deserialize' mode."
-            return false
+        if isSerializationMode {
+            // Check if input appears to be serialized data
+            if Data(base64Encoded: inputData) != nil {
+                errorMessage = "Input appears to be serialized. Switch to 'Deserialize' mode."
+                return false
+            }
+        } else {
+            // Check if input is valid for deserialization
+            if inputData.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                errorMessage = "No input data provided. Please enter valid serialized data."
+                return false
+            }
         }
+        errorMessage = nil
         return true
     }
+    
+    func handleLargeInputData() {
+        let maxAllowedSize = 10 * 1024 * 1024 // 10MB
+        if inputData.count > maxAllowedSize {
+            errorMessage = "Input data is too large. Maximum allowed size is 10MB."
+        }
+    }
 
+    func validateInputForDeserialization() -> Bool {
+        guard !inputData.isEmpty else {
+            errorMessage = "Empty input data. Please provide valid data to deserialize."
+            return false
+        }
+        
+        if selectedEncoding == "Pickle Byte String" && convertPickleStringToData(inputData) == nil {
+            errorMessage = "Invalid Pickle Byte String format. Please check your input."
+            return false
+        }
+        
+        return true
+    }
+    
     func executePythonCode() {
         let task = Process()
         task.launchPath = "/usr/bin/env"
