@@ -160,22 +160,16 @@ struct ContentView: View {
         DispatchQueue.global(qos: .background).async {
             let totalBytes = self.inputData.count
             var processedBytes = 0
-
             var serializedData = Data()
 
-            for chunk in self.inputData.split(by: 1024) {  // 1 KB chunks
-                // Simulate processing time (for testing)
+            for chunk in self.inputData.split(by: 1024) {
                 Thread.sleep(forTimeInterval: 0.05)
-
-                // Serialize chunk to pickle format
                 if let chunkData = chunk.data(using: .utf8) {
                     serializedData.append(chunkData)
                 }
 
                 processedBytes += chunk.count
                 let progress = Double(processedBytes) / Double(totalBytes)
-
-                // Update progress on the main thread
                 DispatchQueue.main.async {
                     self.progressValue = progress
                 }
@@ -188,7 +182,7 @@ struct ContentView: View {
             }
         }
     }
-    
+
     func startDeserialization() {
         isProcessing = true
         taskDescription = "Deserializing Data..."
@@ -205,22 +199,16 @@ struct ContentView: View {
 
             let totalBytes = data.count
             var processedBytes = 0
-
             var deserializedString = ""
 
-            for chunk in data.chunked(by: 1024) {  // Process 1 KB at a time
-                // Simulate processing time (for testing)
+            for chunk in data.chunked(by: 1024) {
                 Thread.sleep(forTimeInterval: 0.05)
-
-                // Decode chunk into string format
                 if let chunkString = String(data: chunk, encoding: .utf8) {
                     deserializedString += chunkString
                 }
 
                 processedBytes += chunk.count
                 let progress = Double(processedBytes) / Double(totalBytes)
-
-                // Update progress on the main thread
                 DispatchQueue.main.async {
                     self.progressValue = progress
                 }
@@ -233,18 +221,11 @@ struct ContentView: View {
             }
         }
     }
-    
-    
-    // Ensure correct encoding selection when switching modes
+
     func updateEncodingSelection() {
-        if isSerializationMode {
-            selectedEncoding = encodingOptionsForSerialization.first ?? "Base64"
-        } else {
-            selectedEncoding = "Auto-Detect"
-        }
+        selectedEncoding = isSerializationMode ? encodingOptionsForSerialization.first ?? "Base64" : "Auto-Detect"
     }
 
-    // Create a working directory in ~/Documents/Pickles
     func createWorkingDirectory() -> URL? {
         let fileManager = FileManager.default
         guard let documentsPath = fileManager.urls(for: .documentDirectory, in: .userDomainMask).first else {
@@ -252,21 +233,18 @@ struct ContentView: View {
             return nil
         }
 
-        let picklesDirectory = documentsPath.appendingPathComponent("PicklesApp")
-
-        // Create the directory if it does not exist
-        if !fileManager.fileExists(atPath: picklesDirectory.path) {
+        let directory = documentsPath.appendingPathComponent("PicklesApp")
+        if !fileManager.fileExists(atPath: directory.path) {
             do {
-                try fileManager.createDirectory(at: picklesDirectory, withIntermediateDirectories: true, attributes: nil)
-                print("Working directory created at: \(picklesDirectory.path)")
+                try fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
             } catch {
                 errorMessage = "Failed to create working directory: \(error.localizedDescription)"
                 return nil
             }
         }
-
-        return picklesDirectory
+        return directory
     }
+
 
     func runPythonCodeReturningData(_ code: String) throws -> Data {
         let task = Process()
